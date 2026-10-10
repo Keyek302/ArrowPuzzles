@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef2fb">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#10152b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Arrow Escape">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Arrow Escape</title>
+<style>
+:root{--bg:#eef2fb;--panel:#fff;--ink:#1e2a78;--text:#1b2240;--muted:#6b7597;--accent:#2f6fed;--ok:#1f9d55;--err:#e03b3b;--line:#d7def2;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10152b;--panel:#1a2140;--ink:#9db4ff;--text:#e8ecff;--muted:#8a93b8;--accent:#6c9bff;--ok:#4cd08a;--err:#ff6b6b;--line:#2a3360}}
+:root[data-theme="dark"]{--bg:#10152b;--panel:#1a2140;--ink:#9db4ff;--text:#e8ecff;--muted:#8a93b8;--accent:#6c9bff;--ok:#4cd08a;--err:#ff6b6b;--line:#2a3360}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+button{font:inherit;color:inherit;cursor:pointer}
+#app{height:100%;display:flex;flex-direction:column;max-width:720px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 4px}
+h1{margin:0;font-size:18px;font-weight:650}
+.ib{width:44px;height:44px;border:0;background:none;color:var(--accent);font-size:30px;line-height:1}
+#stats{display:flex;justify-content:space-between;align-items:center;padding:4px 14px 10px}
+.chip{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:15px}
+.chip svg{width:18px;height:18px}
+#board{flex:1;min-height:0;position:relative}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#tools{display:flex;justify-content:center;gap:44px;padding:10px 0 16px}
+.tool{width:64px;height:64px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);display:grid;place-items:center}
+.tool.on{background:var(--accent);color:var(--bg)}
+.tool svg{width:30px;height:30px}
+.overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;
+  padding:calc(24px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));background:var(--bg)}
+.overlay.hidden{display:none}
+#win{background:rgba(10,14,30,.55)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:26px 28px;display:flex;flex-direction:column;gap:12px;min-width:240px}
+.overlay h2{margin:0;font-size:30px}
+.overlay p{margin:0;color:var(--muted);max-width:320px}
+.btn{min-width:240px;padding:14px 22px;border-radius:14px;border:0;background:var(--accent);color:#fff;font-weight:650;font-size:17px}
+.btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+.seg{display:flex;gap:6px}
+.seg button{padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-weight:600}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button class="ib" id="back" aria-label="Menu">&#8249;</button>
+    <h1 id="title">Level 1</h1>
+    <button class="ib" id="restart" aria-label="Restart" style="font-size:24px">&#8635;</button>
+  </header>
+  <div id="stats">
+    <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19L19 5M9 5h10v10"/></svg><span id="left">0</span></div>
+    <button class="chip" id="diff">Normal</button>
+  </div>
+  <div id="board"><canvas id="cv"></canvas></div>
+  <div id="tools">
+    <button class="tool" id="hint" aria-label="Hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg></button>
+    <button class="tool" id="ruler" aria-label="Show lines of travel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/></svg></button>
+  </div>
+</div>
+
+<div class="overlay" id="menu">
+  <h2>Arrow Escape</h2>
+  <p>Tap an arrow to slide it out. It can only leave if nothing is in its way. Clear the board. No lives, no ads.</p>
+  <button class="btn" id="play">Play</button>
+  <button class="btn ghost" id="daily">Daily puzzle</button>
+  <div class="seg" id="segs"></div>
+  <p style="font-size:13px">Pinch to zoom and drag to move on big boards.</p>
+</div>
+<div class="overlay hidden" id="win">
+  <div class="card"><h2>Solved!</h2><button class="btn" id="next">Next level</button><button class="btn ghost" id="toMenu">Menu</button></div>
+</div>
+
+<script>
+'use strict';
+// ---------- Puzzle generation (pure functions) ----------
+const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];   // up, right, down, left
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function rayIds(occ, cols, rows, c, d) {          // ids of arrows in the straight line ahead of cell c
+  const out = []; let x = c % cols + DX[d], y = (c / cols | 0) + DY[d];
+  while (x >= 0 && y >= 0 && x < cols && y < rows) { const i = occ[y * cols + x]; if (i >= 0 && !out.includes(i)) out.push(i); x += DX[d]; y += DY[d]; }
+  return out;
+}
+
+// Fill the board completely. An arrow may point at other arrows (it just has to wait for them), as long as no
+// group of arrows ends up waiting on each other. Every placement is checked for that before it is accepted.
+function generate(cols, rows, seed, minLen, maxLen, passes = 5, caps = [1, 2, 4, 999]) {
+  const rng = mulberry(seed), N = cols * rows, occ = new Int16Array(N).fill(-1), mark = new Int32Array(N);
+  const arrows = [], deps = [], rayOf = Array.from({ length: N }, () => []);
+  let tok = 0;
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const rayCells = (c, d) => { const out = []; let x = c % cols + DX[d], y = (c / cols | 0) + DY[d]; while (x >= 0 && y >= 0 && x < cols && y < rows) { out.push(y * cols + x); x += DX[d]; y += DY[d]; } return out; };
+
+  // Returns the arrows this one would wait for, or null if placing it would cause a deadlock.
+  function check(path, hd) {
+    const ray = rayCells(path[path.length - 1], hd), wait = new Set(), dependents = new Set();
+    for (const c of ray) { if (mark[c] === tok) return null; if (occ[c] >= 0) wait.add(occ[c]); }
+    for (const c of path) for (const id of rayOf[c]) dependents.add(id);
+    const seen = new Set(), stack = [...wait];
+    while (stack.length) {
+      const x = stack.pop();
+      if (dependents.has(x)) return null;
+      if (seen.has(x)) continue;
+      seen.add(x);
+      for (const y of deps[x]) stack.push(y);
+    }
+    return { ray, wait, dependents };
+  }
+  function add(path, hd, r) {
+    const id = arrows.length;
+    path.forEach(c => occ[c] = id);
+    arrows.push({ id, cells: path, dir: hd });
+    deps.push(r.wait);
+    for (const a of r.dependents) deps[a].add(id);
+    for (const c of r.ray) rayOf[c].push(id);
+  }
+  // Try both ends of a path as the head; prefer the choice that waits for fewer arrows.
+  function place(path, dirs, cap) {
+    const opts = [];
+    for (const atEnd of [true, false]) {
+      const p = atEnd ? path : path.slice().reverse(), hd = atEnd ? dirs[dirs.length - 1] : (dirs[0] + 2) % 4;
+      const r = check(p, hd);
+      if (r && r.wait.size <= cap) opts.push({ p, hd, r });
+    }
+    if (!opts.length) return false;
+    opts.sort((a, b) => a.r.wait.size - b.r.wait.size);
+    const o = opts.length > 1 && rng() < 0.3 ? opts[1] : opts[0];
+    add(o.p, o.hd, o.r);
+    return true;
+  }
+
+  for (let pass = 0; pass < passes; pass++) for (const s of shuffle([...Array(N).keys()])) {
+    if (occ[s] >= 0) continue;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      tok++;
+      const target = minLen + Math.floor(rng() * (maxLen - minLen + 1)), path = [s], dirs = [];
+      mark[s] = tok;
+      let d = -1;
+      while (path.length < target) {
+        const c = path[path.length - 1], x = c % cols, y = c / cols | 0, opts = [];
+        for (let k = 0; k < 4; k++) {
+          const nx = x + DX[k], ny = y + DY[k];
+          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+          const i = ny * cols + nx;
+          if (occ[i] < 0 && mark[i] !== tok) opts.push(k);
+        }
+        if (!opts.length) break;
+        d = (d >= 0 && opts.includes(d) && rng() < 0.6) ? d : opts[Math.floor(rng() * opts.length)];
+        const i = (y + DY[d]) * cols + x + DX[d];
+        path.push(i); mark[i] = tok; dirs.push(d);
+      }
+      if (path.length < minLen) continue;
+      if (place(path, dirs, caps[Math.min(pass, caps.length - 1)])) break;
+    }
+  }
+
+  // Leftover cell next to an arrow's tail? Lengthen that arrow instead (its head and path to the edge stay the same).
+  const closure = a => { const seen = new Set([a]), st = [a]; while (st.length) { for (const y of deps[st.pop()]) if (!seen.has(y)) { seen.add(y); st.push(y); } } return seen; };
+  for (let pass = 0; pass < 3; pass++) for (let s = 0; s < N; s++) {
+    if (occ[s] >= 0) continue;
+    const x = s % cols, y = s / cols | 0;
+    for (const k of shuffle([0, 1, 2, 3])) {
+      const nx = x + DX[k], ny = y + DY[k];
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const b = occ[ny * cols + nx];
+      if (b < 0 || arrows[b].cells[0] !== ny * cols + nx || arrows[b].cells.length >= maxLen + 2) continue;
+      if (rayOf[s].includes(b)) continue;
+      const reach = closure(b);
+      if (rayOf[s].some(id => reach.has(id))) continue;
+      arrows[b].cells.unshift(s); occ[s] = b;
+      for (const id of rayOf[s]) deps[id].add(b);
+      break;
+    }
+  }
+  // Last resort for any leftover cell: a one-cell arrow pointing whichever way is safe.
+  let blanks = 0;
+  for (let s = 0; s < N; s++) {
+    if (occ[s] >= 0) continue;
+    tok++; mark[s] = tok;
+    const opts = [];
+    for (let d = 0; d < 4; d++) { const r = check([s], d); if (r) opts.push({ d, r }); }
+    if (!opts.length) { blanks++; continue; }
+    opts.sort((a, b) => a.r.wait.size - b.r.wait.size);
+    add([s], opts[0].d, opts[0].r);
+  }
+  return { cols, rows, arrows, blanks };
+}
+
+function solvable(g) {
+  const occ = new Int16Array(g.cols * g.rows).fill(-1);
+  g.arrows.forEach(a => a.cells.forEach(c => occ[c] = a.id));
+  const gone = new Set(); let moved = true;
+  while (moved && gone.size < g.arrows.length) {
+    moved = false;
+    for (const a of g.arrows) {
+      if (gone.has(a.id) || rayIds(occ, g.cols, g.rows, a.cells[a.cells.length - 1], a.dir).length) continue;
+      a.cells.forEach(c => occ[c] = -1); gone.add(a.id); moved = true;
+    }
+  }
+  return gone.size === g.arrows.length;
+}
+
+// ---------- App state ----------
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d'), board = $('board');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+const DIFF = [{ n: 'Easy', c: -1, l: 5 }, { n: 'Normal', c: 0, l: 6 }, { n: 'Hard', c: 3, l: 9 }];
+let G = null, V = { k: 20, ox: 0, oy: 0, fit: 20 }, needDraw = true, C = {}, dpr = 1;
+let diff = store.get('ae.diff', 1), level = store.get('ae.level', 1);
+
+function dateKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function hashStr(s) { let h = 2166136261; for (const ch of s) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
+
+function build(cols, rows, seed, minLen, maxLen) {
+  for (let i = 0; i < 20; i++) {
+    const g = generate(cols, rows, seed + i * 977, minLen, maxLen);
+    if (!g.blanks && g.arrows.length >= 3 && solvable(g)) return g;
+  }
+  return generate(cols, rows, seed, minLen, maxLen);
+}
+
+function startLevel(n) {
+  level = n;
+  const d = DIFF[diff], bw = board.clientWidth || 360, bh = board.clientHeight || 600;
+  const cols = Math.min(22, 5 + Math.floor(n * 0.6) + d.c), rows = Math.max(cols, Math.min(34, Math.round(cols * bh / bw)));
+  load(build(cols, rows, n * 7919 + diff * 131, 2, Math.min(14, d.l + Math.floor(n / 4))), 'Level ' + n, 'level');
+}
+function startDaily() {
+  const k = dateKey();
+  load(build(20, 30, hashStr(k), 2, 12), new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' }), 'daily');
+}
+
+function load(src, title, mode) {
+  const { cols, rows } = src, occ = new Int16Array(cols * rows).fill(-1);
+  const arrows = src.arrows.map(a => {
+    const pts = a.cells.map(c => ({ x: c % cols, y: c / cols | 0 })), head = a.cells[a.cells.length - 1], hx = head % cols, hy = head / cols | 0;
+    const r = [hy, cols - 1 - hx, rows - 1 - hy, hx][a.dir], L = a.cells.length - 1, far = r + L + 3;
+    const P = [...pts, { x: hx + DX[a.dir] * far, y: hy + DY[a.dir] * far }], cum = [0];
+    for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i].x - P[i - 1].x, P[i].y - P[i - 1].y));
+    a.cells.forEach(c => occ[c] = a.id);
+    return { id: a.id, dir: a.dir, pts, P, cum, L, r, head, alive: true, s: -1, v: 0, err: 0, err2: 0 };
+  });
+  G = { cols, rows, occ, arrows, left: arrows.length, mode, title, src, ruler: G ? G.ruler : false, hint: null, won: false };
+  $('title').textContent = title;
+  $('diff').textContent = mode === 'daily' ? 'Daily' : DIFF[diff].n;
+  $('ruler').classList.toggle('on', G.ruler);
+  $('left').textContent = G.left;
+  $('win').classList.add('hidden'); $('menu').classList.add('hidden');
+  resize(true);
+}
+
+const blockers = a => rayIds(G.occ, G.cols, G.rows, a.head, a.dir);
+const isFree = a => a.alive && a.s < 0 && !blockers(a).length;
+
+function tap(a) {
+  if (!a || !a.alive || a.s >= 0) return;
+  const bl = blockers(a);
+  if (!bl.length) { a.s = 0; a.v = 8; if (G.hint && G.hint.id === a.id) G.hint = null; }
+  else {
+    const real = bl.filter(i => G.arrows[i].s < 0);      // arrows already sliding away don't count as blocking
+    if (real.length) { a.err = 0.5; G.arrows[real[0]].err2 = 0.5; try { navigator.vibrate && navigator.vibrate(30); } catch (e) {} }
+  }
+  needDraw = true;
+}
+
+function update(dt) {
+  if (!G) return;
+  for (const a of G.arrows) {
+    if (!a.alive) continue;
+    if (a.err > 0) { a.err = Math.max(0, a.err - dt); needDraw = true; }
+    if (a.err2 > 0) { a.err2 = Math.max(0, a.err2 - dt); needDraw = true; }
+    if (a.s >= 0) {
+      a.v = Math.min(a.v + 90 * dt, 45); a.s += a.v * dt; needDraw = true;
+      if (a.s > a.L + a.r + 1.5) {
+        a.alive = false;
+        for (let i = 0; i < G.occ.length; i++) if (G.occ[i] === a.id) G.occ[i] = -1;
+        G.left--; $('left').textContent = G.left;
+      }
+    }
+  }
+  if (G.hint) { G.hint.t -= dt; needDraw = true; if (G.hint.t <= 0) G.hint = null; }
+  if (G.left === 0 && !G.won) { G.won = true; finish(); }
+}
+
+function finish() {
+  if (G.mode === 'level') { store.set('ae.level', level + 1); }
+  else { const d = store.get('ae.daily', {}); d[dateKey()] = true; store.set('ae.daily', d); }
+  $('next').style.display = G.mode === 'level' ? '' : 'none';
+  setTimeout(() => $('win').classList.remove('hidden'), 350);
+}
+
+// ---------- Drawing ----------
+function readColors() {
+  const s = getComputedStyle(document.documentElement);
+  for (const k of ['ink', 'ok', 'err', 'muted', 'accent']) C[k] = s.getPropertyValue('--' + k).trim() || '#888';
+  needDraw = true;
+}
+const toPx = (x, y) => [V.ox + (x + 0.5) * V.k, V.oy + (y + 0.5) * V.k];
+
+function strokeLine(points, color, lw, alpha = 1) {
+  ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = lw;
+  ctx.beginPath(); points.forEach((p, i) => { const [x, y] = toPx(p.x, p.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+}
+function head(p, dir, color, alpha = 1, grow = 1) {
+  const [x, y] = toPx(p.x, p.y), k = V.k * grow, dx = DX[dir], dy = DY[dir];
+  ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.beginPath();
+  ctx.moveTo(x + dx * 0.46 * k, y + dy * 0.46 * k);
+  ctx.lineTo(x - dx * 0.1 * k + dy * 0.3 * k, y - dy * 0.1 * k + dx * 0.3 * k);
+  ctx.lineTo(x - dx * 0.1 * k - dy * 0.3 * k, y - dy * 0.1 * k - dx * 0.3 * k);
+  ctx.closePath(); ctx.fill();
+}
+function pointAt(P, cum, s) {
+  let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+  const t = (s - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
+  return { x: P[i - 1].x + (P[i].x - P[i - 1].x) * t, y: P[i - 1].y + (P[i].y - P[i - 1].y) * t };
+}
+function visiblePts(a) {                                  // the snake's current shape, sliding or not
+  if (a.s < 0) return a.pts;
+  const out = [pointAt(a.P, a.cum, a.s)];
+  for (let i = 0; i < a.P.length; i++) if (a.cum[i] > a.s && a.cum[i] < a.s + a.L) out.push(a.P[i]);
+  out.push(pointAt(a.P, a.cum, a.s + a.L));
+  return out;
+}
+
+function draw() {
+  const W = board.clientWidth, H = board.clientHeight;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (!G) return;
+  const lw = Math.max(1.6, V.k * 0.16);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const a of G.arrows) {
+    if (!a.alive) continue;
+    if (G.ruler && a.s < 0) {                              // dashed line of travel: green if free, grey if blocked
+      const h = a.pts[a.pts.length - 1], e = a.P[a.P.length - 1];
+      ctx.setLineDash([V.k * 0.2, V.k * 0.25]);
+      strokeLine([h, e], blockers(a).length ? C.muted : C.ok, Math.max(1, lw * 0.5), 0.55);
+      ctx.setLineDash([]);
+    }
+  }
+  for (const a of G.arrows) {
+    if (!a.alive) continue;
+    let pts = visiblePts(a), color = C.ink, alpha = 1;
+    if (a.err > 0) { color = C.err; const sh = Math.sin(a.err * 70) * V.k * 0.07 * Math.min(1, a.err / 0.3); pts = pts.map(p => ({ x: p.x + sh / V.k, y: p.y })); }
+    else if (a.err2 > 0) { color = C.err; alpha = 0.6; }
+    if (G.hint && G.hint.id === a.id) { color = C.ok; strokeLine(pts, C.ok, lw * 3, 0.25 + 0.2 * Math.sin(performance.now() / 120)); }
+    strokeLine(pts, color, lw, alpha);
+    head(pts[pts.length - 1], a.dir, color, alpha);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- View: fit, resize, zoom, pan ----------
+function resize(refit) {
+  const W = board.clientWidth || 360, H = board.clientHeight || 600;
+  dpr = Math.min(window.devicePixelRatio || 1, 3);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  if (G && refit) {
+    V.fit = Math.min(W / G.cols, H / G.rows) * 0.985; V.k = V.fit;
+    V.ox = (W - G.cols * V.k) / 2; V.oy = (H - G.rows * V.k) / 2;
+  }
+  needDraw = true;
+}
+function clampView() {
+  const W = board.clientWidth, H = board.clientHeight, gw = G.cols * V.k, gh = G.rows * V.k, m = 40;
+  V.ox = gw <= W - 2 * m ? (W - gw) / 2 : Math.min(m, Math.max(W - gw - m, V.ox));
+  V.oy = gh <= H - 2 * m ? (H - gh) / 2 : Math.min(m, Math.max(H - gh - m, V.oy));
+}
+function zoomAt(mx, my, k2) {
+  k2 = Math.max(V.fit * 0.9, Math.min(90, k2));
+  const wx = (mx - V.ox) / V.k, wy = (my - V.oy) / V.k;
+  V.k = k2; V.ox = mx - wx * k2; V.oy = my - wy * k2; clampView(); needDraw = true;
+}
+
+function segDist(x, y, A, B) {
+  const dx = B.x - A.x, dy = B.y - A.y, l = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((x - A.x) * dx + (y - A.y) * dy) / l));
+  return Math.hypot(x - (A.x + dx * t), y - (A.y + dy * t));
+}
+function pick(px, py) {
+  const x = (px - V.ox) / V.k - 0.5, y = (py - V.oy) / V.k - 0.5;
+  let best = null, bd = 0.62;
+  for (const a of G.arrows) {
+    if (!a.alive || a.s >= 0) continue;
+    for (let i = 0; i < a.pts.length; i++) { const d = segDist(x, y, a.pts[i], a.pts[i + 1] || a.pts[i]); if (d < bd) { bd = d; best = a; } }
+  }
+  return best;
+}
+
+const ptrs = new Map(); let moved = false, pinch = null;
+const rel = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+function snap() {
+  const [a, b] = [...ptrs.values()];
+  return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: V.k, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, ox: V.ox, oy: V.oy };
+}
+cv.addEventListener('pointerdown', e => {
+  try { cv.setPointerCapture(e.pointerId); } catch (x) {}
+  ptrs.set(e.pointerId, rel(e)); moved = ptrs.size > 1; pinch = ptrs.size === 2 ? snap() : null;
+});
+cv.addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId); if (!p || !G) return;
+  const q = rel(e);
+  if (ptrs.size === 1) {
+    if (!moved && Math.hypot(q.x - p.x, q.y - p.y) < 6) return;
+    moved = true; V.ox += q.x - p.x; V.oy += q.y - p.y; clampView(); needDraw = true;
+  } else if (pinch) {
+    ptrs.set(e.pointerId, q);
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const k2 = Math.max(V.fit * 0.9, Math.min(90, pinch.k * d / pinch.d)), wx = (pinch.mx - pinch.ox) / pinch.k, wy = (pinch.my - pinch.oy) / pinch.k;
+    V.k = k2; V.ox = mx - wx * k2; V.oy = my - wy * k2; clampView(); needDraw = true;
+  }
+  ptrs.set(e.pointerId, q);
+});
+const up = e => {
+  const p = ptrs.get(e.pointerId); ptrs.delete(e.pointerId);
+  if (p && !moved && ptrs.size === 0 && G) tap(pick(p.x, p.y));
+  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0) moved = false;
+};
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = null; if (!ptrs.size) moved = false; });
+cv.addEventListener('wheel', e => { e.preventDefault(); const p = rel(e); if (G) zoomAt(p.x, p.y, V.k * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+// ---------- Buttons ----------
+function hint() {
+  if (!G) return;
+  const free = G.arrows.filter(isFree); if (!free.length) return;
+  const a = free[Math.floor(Math.random() * free.length)];
+  G.hint = { id: a.id, t: 2.5 };
+  const [x, y] = toPx(a.pts[a.pts.length - 1].x, a.pts[a.pts.length - 1].y), W = board.clientWidth, H = board.clientHeight;
+  if (x < 0 || y < 0 || x > W || y > H) { V.ox += W / 2 - x; V.oy += H / 2 - y; clampView(); }
+  needDraw = true;
+}
+$('hint').onclick = hint;
+$('ruler').onclick = () => { if (!G) return; G.ruler = !G.ruler; $('ruler').classList.toggle('on', G.ruler); needDraw = true; };
+$('restart').onclick = () => G && load(G.src, G.title, G.mode);
+$('back').onclick = () => { renderMenu(); $('menu').classList.remove('hidden'); };
+$('diff').onclick = () => { if (G && G.mode === 'level') { diff = (diff + 1) % 3; store.set('ae.diff', diff); startLevel(level); } };
+$('next').onclick = () => startLevel(level);
+$('toMenu').onclick = () => { renderMenu(); $('win').classList.add('hidden'); $('menu').classList.remove('hidden'); };
+$('play').onclick = () => startLevel(level);
+$('daily').onclick = startDaily;
+function renderMenu() {
+  $('play').textContent = 'Play: Level ' + level;
+  const done = store.get('ae.daily', {})[dateKey()];
+  $('daily').textContent = 'Daily puzzle' + (done ? ' (solved)' : '');
+  $('segs').replaceChildren(...DIFF.map((d, i) => {
+    const b = document.createElement('button'); b.textContent = d.n; b.className = i === diff ? 'on' : '';
+    b.onclick = () => { diff = i; store.set('ae.diff', i); renderMenu(); }; return b;
+  }));
+}
+
+// ---------- Main loop ----------
+let last = 0;
+function loop(t) {
+  const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t;
+  update(dt);
+  if (needDraw) { needDraw = false; draw(); }
+  requestAnimationFrame(loop);
+}
+if (window.ResizeObserver) new ResizeObserver(() => resize(true)).observe(board);
+window.addEventListener('resize', () => resize(true));
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors); } catch (e) {}
+readColors(); renderMenu(); resize(true);
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
