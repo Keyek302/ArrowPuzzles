@@ -295,7 +295,7 @@ function update(dt) {
 }
 
 function finish() {
-  if (G.mode === 'level') { store.set('ae.level', level + 1); }
+  if (G.mode === 'level') { level++; store.set('ae.level', level); }   // move on in memory too, so Next goes to the next level
   else { const d = store.get('ae.daily', {}); d[dateKey()] = true; store.set('ae.daily', d); }
   $('next').style.display = G.mode === 'level' ? '' : 'none';
   setTimeout(() => $('win').classList.remove('hidden'), 350);
