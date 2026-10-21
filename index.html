@@ -3,15 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef2fb">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#10152b">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Arrow Escape">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Arrow Escape</title>
 <style>
 :root{--bg:#eef2fb;--panel:#fff;--ink:#1e2a78;--text:#1b2240;--muted:#6b7597;--accent:#2f6fed;--ok:#1f9d55;--err:#e03b3b;--line:#d7def2;
@@ -47,6 +38,20 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .seg{display:flex;gap:6px}
 .seg button{padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-weight:600}
 .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.calbtn{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));left:10px}
+.calbtn svg{width:28px;height:28px}
+.cal{width:min(340px,100%);box-sizing:border-box;padding:16px;gap:10px}
+.calhead{display:flex;align-items:center;justify-content:space-between}
+.calhead strong{font-size:17px}
+.calhead .ib{width:40px;height:40px;font-size:28px}
+.calhead .ib:disabled{opacity:.25;cursor:default}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.calgrid .dow{font-size:12px;color:var(--muted);font-weight:600}
+.day{aspect-ratio:1;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-weight:600;font-size:15px;padding:0;position:relative}
+.day.done{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.day.done::after{content:'\2713';position:absolute;right:4px;top:1px;font-size:10px}
+.day.today{outline:2px solid var(--accent);outline-offset:1px}
+.day:disabled{opacity:.3;cursor:default}
 </style>
 </head>
 <body>
@@ -68,6 +73,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 </div>
 
 <div class="overlay" id="menu">
+  <button class="ib calbtn" id="calOpen" aria-label="Daily puzzle calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
   <h2>Arrow Escape</h2>
   <p>Tap an arrow to slide it out. It can only leave if nothing is in its way. Clear the board. No lives, no ads.</p>
   <button class="btn" id="play">Play</button>
@@ -75,8 +81,17 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
   <div class="seg" id="segs"></div>
   <p style="font-size:13px">Pinch to zoom and drag to move on big boards.</p>
 </div>
+<div class="overlay hidden" id="cal">
+  <h2>Daily puzzles</h2>
+  <p id="calInfo"></p>
+  <div class="card cal">
+    <div class="calhead"><button class="ib" id="calPrev" aria-label="Previous month">&#8249;</button><strong id="calMonth"></strong><button class="ib" id="calNext" aria-label="Next month">&#8250;</button></div>
+    <div class="calgrid" id="calGrid"></div>
+  </div>
+  <button class="btn ghost" id="calBack">Back</button>
+</div>
 <div class="overlay hidden" id="win">
-  <div class="card"><h2>Solved!</h2><button class="btn" id="next">Next level</button><button class="btn ghost" id="toMenu">Menu</button></div>
+  <div class="card"><h2>Solved!</h2><button class="btn" id="next">Next level</button><button class="btn" id="toCal">Calendar</button><button class="btn ghost" id="toMenu">Menu</button></div>
 </div>
 
 <script>
@@ -220,7 +235,7 @@ const DIFF = [{ n: 'Easy', c: -1, l: 5 }, { n: 'Normal', c: 0, l: 6 }, { n: 'Har
 let G = null, V = { k: 20, ox: 0, oy: 0, fit: 20 }, needDraw = true, C = {}, dpr = 1;
 let diff = store.get('ae.diff', 1), level = store.get('ae.level', 1);
 
-function dateKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function dateKey(d = new Date()) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function hashStr(s) { let h = 2166136261; for (const ch of s) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
 
 function build(cols, rows, seed, minLen, maxLen) {
@@ -237,9 +252,11 @@ function startLevel(n) {
   const cols = Math.min(22, 5 + Math.floor(n * 0.6) + d.c), rows = Math.max(cols, Math.min(34, Math.round(cols * bh / bw)));
   load(build(cols, rows, n * 7919 + diff * 131, 2, Math.min(14, d.l + Math.floor(n / 4))), 'Level ' + n, 'level');
 }
-function startDaily() {
-  const k = dateKey();
-  load(build(20, 30, hashStr(k), 2, 12), new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' }), 'daily');
+function startDaily(k = dateKey()) {
+  const [y, m, d] = k.split('-').map(Number), dt = new Date(y, m - 1, d);
+  const title = dt.toLocaleDateString(undefined, k.slice(0, 4) === String(new Date().getFullYear()) ? { month: 'long', day: 'numeric' } : { month: 'long', day: 'numeric', year: 'numeric' });
+  load(build(20, 30, hashStr(k), 2, 12), title, 'daily');
+  G.dayKey = k;
 }
 
 function load(src, title, mode) {
@@ -257,7 +274,7 @@ function load(src, title, mode) {
   $('diff').textContent = mode === 'daily' ? 'Daily' : DIFF[diff].n;
   $('ruler').classList.toggle('on', G.ruler);
   $('left').textContent = G.left;
-  $('win').classList.add('hidden'); $('menu').classList.add('hidden');
+  $('win').classList.add('hidden'); $('menu').classList.add('hidden'); $('cal').classList.add('hidden');
   resize(true);
 }
 
@@ -296,8 +313,9 @@ function update(dt) {
 
 function finish() {
   if (G.mode === 'level') { level++; store.set('ae.level', level); }   // move on in memory too, so Next goes to the next level
-  else { const d = store.get('ae.daily', {}); d[dateKey()] = true; store.set('ae.daily', d); }
+  else { const d = store.get('ae.daily', {}); d[G.dayKey || dateKey()] = true; store.set('ae.daily', d); }
   $('next').style.display = G.mode === 'level' ? '' : 'none';
+  $('toCal').style.display = G.mode === 'daily' ? '' : 'none';
   setTimeout(() => $('win').classList.remove('hidden'), 350);
 }
 
@@ -443,13 +461,53 @@ function hint() {
 }
 $('hint').onclick = hint;
 $('ruler').onclick = () => { if (!G) return; G.ruler = !G.ruler; $('ruler').classList.toggle('on', G.ruler); needDraw = true; };
-$('restart').onclick = () => G && load(G.src, G.title, G.mode);
+$('restart').onclick = () => { if (!G) return; const k = G.dayKey; load(G.src, G.title, G.mode); G.dayKey = k; };
 $('back').onclick = () => { renderMenu(); $('menu').classList.remove('hidden'); };
 $('diff').onclick = () => { if (G && G.mode === 'level') { diff = (diff + 1) % 3; store.set('ae.diff', diff); startLevel(level); } };
 $('next').onclick = () => startLevel(level);
 $('toMenu').onclick = () => { renderMenu(); $('win').classList.add('hidden'); $('menu').classList.remove('hidden'); };
 $('play').onclick = () => startLevel(level);
-$('daily').onclick = startDaily;
+$('daily').onclick = () => startDaily();
+$('calOpen').onclick = openCal;
+$('toCal').onclick = () => { $('win').classList.add('hidden'); openCal(); };
+$('calBack').onclick = () => { $('cal').classList.add('hidden'); renderMenu(); $('menu').classList.remove('hidden'); };
+$('calPrev').onclick = () => { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(); };
+$('calNext').onclick = () => { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(); };
+
+// ---------- Daily calendar ----------
+const FIRST_DAY = '2026-10-01';                           // earliest day shown in the calendar (YYYY-MM-DD)
+let calY = 0, calM = 0;
+function streak() {
+  const done = store.get('ae.daily', {}), t = new Date(); t.setHours(12, 0, 0, 0);
+  if (!done[dateKey(t)]) t.setDate(t.getDate() - 1);     // today not solved yet: keep yesterday's streak alive
+  let n = 0;
+  while (done[dateKey(t)]) { n++; t.setDate(t.getDate() - 1); }
+  return n;
+}
+function openCal() {
+  const t = new Date(); calY = t.getFullYear(); calM = t.getMonth();
+  $('menu').classList.add('hidden'); $('cal').classList.remove('hidden'); renderCal();
+}
+function renderCal() {
+  const done = store.get('ae.daily', {}), today = dateKey(), first = FIRST_DAY.split('-').map(Number);
+  const startIdx = first[0] * 12 + first[1] - 1, nowD = new Date(), nowIdx = nowD.getFullYear() * 12 + nowD.getMonth(), idx = calY * 12 + calM;
+  $('calMonth').textContent = new Date(calY, calM, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  $('calPrev').disabled = idx <= startIdx; $('calNext').disabled = idx >= nowIdx;
+  const n = streak();
+  $('calInfo').textContent = (n ? n + '-day streak. ' : '') + 'Tap any day to play it. Green means solved.';
+  const cells = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(l => { const s = document.createElement('span'); s.className = 'dow'; s.textContent = l; return s; });
+  const lead = new Date(calY, calM, 1).getDay(), days = new Date(calY, calM + 1, 0).getDate();
+  for (let i = 0; i < lead; i++) cells.push(document.createElement('span'));
+  for (let d = 1; d <= days; d++) {
+    const k = dateKey(new Date(calY, calM, d, 12)), b = document.createElement('button');
+    b.textContent = d; b.className = 'day' + (done[k] ? ' done' : '') + (k === today ? ' today' : '');
+    b.disabled = k > today || k < FIRST_DAY;
+    b.onclick = () => startDaily(k);
+    cells.push(b);
+  }
+  $('calGrid').replaceChildren(...cells);
+}
+
 function renderMenu() {
   $('play').textContent = 'Play: Level ' + level;
   const done = store.get('ae.daily', {})[dateKey()];
@@ -472,7 +530,6 @@ if (window.ResizeObserver) new ResizeObserver(() => resize(true)).observe(board)
 window.addEventListener('resize', () => resize(true));
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors); } catch (e) {}
 readColors(); renderMenu(); resize(true);
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 requestAnimationFrame(loop);
 </script>
 </body>
