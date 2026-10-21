@@ -90,8 +90,17 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
   </div>
   <button class="btn ghost" id="calBack">Back</button>
 </div>
+<div class="overlay hidden" id="conf">
+  <div class="card">
+    <h2 id="confTitle"></h2>
+    <p id="confText"></p>
+    <p id="confBest"></p>
+    <button class="btn" id="confPlay">Play</button>
+    <button class="btn ghost" id="confCancel">Cancel</button>
+  </div>
+</div>
 <div class="overlay hidden" id="win">
-  <div class="card"><h2>Solved!</h2><button class="btn" id="next">Next level</button><button class="btn" id="toCal">Calendar</button><button class="btn ghost" id="toMenu">Menu</button></div>
+  <div class="card"><h2>Solved!</h2><p id="winTime"></p><button class="btn" id="next">Next level</button><button class="btn" id="toCal">Calendar</button><button class="btn ghost" id="toMenu">Menu</button></div>
 </div>
 
 <script>
@@ -259,6 +268,13 @@ function startDaily(k = dateKey()) {
   G.dayKey = k;
 }
 
+const fmtTime = t => Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+const elapsed = () => G.acc + (G.last == null ? 0 : performance.now() - G.last);
+document.addEventListener('visibilitychange', () => {       // don't count time while the tab is hidden
+  if (!G) return;
+  if (document.hidden) { if (G.last != null) { G.acc += performance.now() - G.last; G.last = null; } }
+  else if (G.last == null && !G.won) G.last = performance.now();
+});
 function load(src, title, mode) {
   const { cols, rows } = src, occ = new Int16Array(cols * rows).fill(-1);
   const arrows = src.arrows.map(a => {
@@ -269,7 +285,7 @@ function load(src, title, mode) {
     a.cells.forEach(c => occ[c] = a.id);
     return { id: a.id, dir: a.dir, pts, P, cum, L, r, head, alive: true, s: -1, v: 0, err: 0, err2: 0 };
   });
-  G = { cols, rows, occ, arrows, left: arrows.length, mode, title, src, ruler: G ? G.ruler : false, hint: null, won: false };
+  G = { cols, rows, occ, arrows, left: arrows.length, mode, title, src, ruler: G ? G.ruler : false, hint: null, won: false, acc: 0, last: performance.now() };
   $('title').textContent = title;
   $('diff').textContent = mode === 'daily' ? 'Daily' : DIFF[diff].n;
   $('ruler').classList.toggle('on', G.ruler);
@@ -313,7 +329,16 @@ function update(dt) {
 
 function finish() {
   if (G.mode === 'level') { level++; store.set('ae.level', level); }   // move on in memory too, so Next goes to the next level
-  else { const d = store.get('ae.daily', {}); d[G.dayKey || dateKey()] = true; store.set('ae.daily', d); }
+  else {
+    const k = G.dayKey || dateKey(), d = store.get('ae.daily', {});
+    d[k] = true; store.set('ae.daily', d);
+    const secs = Math.max(1, Math.round(elapsed() / 1000)), best = store.get('ae.dailyBest', {}), prev = best[k];
+    let msg = 'Time ' + fmtTime(secs);
+    if (prev == null || secs < prev) { best[k] = secs; store.set('ae.dailyBest', best); if (prev != null) msg += ' \u2013 new best!'; }
+    else msg += ' (best ' + fmtTime(prev) + ')';
+    $('winTime').textContent = msg;
+  }
+  if (G.mode === 'level') $('winTime').textContent = '';
   $('next').style.display = G.mode === 'level' ? '' : 'none';
   $('toCal').style.display = G.mode === 'daily' ? '' : 'none';
   setTimeout(() => $('win').classList.remove('hidden'), 350);
@@ -484,6 +509,18 @@ function streak() {
   while (done[dateKey(t)]) { n++; t.setDate(t.getDate() - 1); }
   return n;
 }
+let confKey = null;
+function askPlay(k) {
+  confKey = k;
+  const [y, m, d] = k.split('-').map(Number), best = store.get('ae.dailyBest', {})[k], done = store.get('ae.daily', {})[k];
+  $('confTitle').textContent = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  $('confText').textContent = 'Play the daily puzzle for this date?';
+  $('confBest').textContent = best != null ? 'Best time: ' + fmtTime(best) : done ? 'Solved before (no time recorded)' : 'Not played yet';
+  $('confPlay').textContent = done ? 'Play again' : 'Play';
+  $('conf').classList.remove('hidden');
+}
+$('confPlay').onclick = () => { $('conf').classList.add('hidden'); startDaily(confKey); };
+$('confCancel').onclick = () => $('conf').classList.add('hidden');
 function openCal() {
   const t = new Date(); calY = t.getFullYear(); calM = t.getMonth();
   $('menu').classList.add('hidden'); $('cal').classList.remove('hidden'); renderCal();
@@ -502,7 +539,7 @@ function renderCal() {
     const k = dateKey(new Date(calY, calM, d, 12)), b = document.createElement('button');
     b.textContent = d; b.className = 'day' + (done[k] ? ' done' : '') + (k === today ? ' today' : '');
     b.disabled = k > today || k < FIRST_DAY;
-    b.onclick = () => startDaily(k);
+    b.onclick = () => askPlay(k);
     cells.push(b);
   }
   $('calGrid').replaceChildren(...cells);
